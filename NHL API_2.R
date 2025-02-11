@@ -11,6 +11,9 @@ library(tidyr)
 library(jsonlite)
 library(httr)
 
+# Define the API base URL
+base_url <- "https://api-web.nhle.com/v1/player"
+
 # Define parameters
 player_id <- 8478402   # Example: Nathan MacKinnon
 season <- "20232024"   # Format: YYYYYYYY (e.g., "20232024" for 2023-24 season)
