@@ -1,0 +1,110 @@
+---
+title: "seasonPerformanceData"
+author: "Harrison Cradduck"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# import libraries
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(stringr)
+library(fuzzyjoin)
+```
+
+```{r, warning=FALSE, message=FALSE}
+# Set your directory containing the CSVs
+csv_files <- list.files(path = "C:\\Users\\harri\\OneDrive\\Current Classes\\SLM 418\\Season Data", pattern = "\\.csv$", full.names = TRUE)
+
+# Read and combine with consistent column types
+seasonPerfDataDf <- csv_files %>%
+  map_dfr(function(file) {
+    season <- str_extract(basename(file), "^\\d{8}")
+    seasonPerfDataDf <- read_csv(file, col_types = cols(.default = "c")) # Read all columns as character
+    seasonPerfDataDf <- mutate(seasonPerfDataDf, season = season)
+    return(seasonPerfDataDf)
+  })
+
+# Optional: make season the first column
+seasonPerfDataDf <- seasonPerfDataDf %>%
+  dplyr::select(season, everything())
+```
+
+```{r}
+seasonPerfDataDf2 <- seasonPerfDataDf %>%
+  dplyr::select(-`...1`) %>% 
+  mutate(across(everything(), ~ ifelse(. == "-", "0", .)),
+         across(.cols = contains("%"), .fns = ~ as.numeric(.x) / 100),
+         across(.cols = {
+        cols <- setdiff(names(.), "season")
+        cols <- cols[!grepl("%", cols)]
+        cols[sapply(.[cols], function(x) any(grepl("\\d", x)))]
+      },
+      .fns = ~ as.numeric(as.character(.x))
+    )) %>% 
+  rename(name = "Player") %>% 
+  mutate(across(c(Team), ~ str_replace_all(., "PHX", "ARI")),
+         Team = str_replace(Team, "L.A", "LAK"),
+         Team = str_replace(Team, "T.B", "TBL"),
+         Team = str_replace(Team, "S.J", "SJS"),
+         Team = str_replace(Team, "N.J", "NJD")) %>% 
+  separate(Team, into = c("team1", "team2", "team3", "team4"), sep = ", ", fill = "right")
+
+unique(seasonPerfDataDf2$Team)
+
+seasonPerfDataDf3 <- seasonPerfDataDf2 %>% 
+  pivot_longer(cols = starts_with("team"),
+               names_to = "team_slot",
+               values_to = "team") %>%
+  filter(!is.na(team)) %>% 
+  dplyr::select(season, name, team, Position, everything(), -team_slot)
+```
+
+```{r}
+financialData <- read.csv("C:\\Users\\harri\\OneDrive\\Current Classes\\SLM 418\\Finance Data\\financialSeasonStatsData.csv")
+financialData2 <- financialData %>%
+  mutate(season = as.character(season)) %>%
+  arrange(season, name, desc(Cap.Hit.Total)) %>%
+  distinct(season, name, .keep_all = TRUE)
+```
+
+```{r}
+allData <- left_join(seasonPerfDataDf3, financialData2, by = c("season", "name", "team" = "team", "Position" = "position"))
+```
+
+```{r}
+unmatched_perf <- anti_join(seasonPerfDataDf2, financialData2, by = c("season", "name"))
+unmatched_salary <- anti_join(financialData2, seasonPerfDataDf2, by = c("season", "name"))
+
+unmatched_names <- stringdist_inner_join(unmatched_perf, unmatched_salary, by = c("season", "name"), method = "jw", max_dist = 0.15)
+
+unmatched_names_final <- unmatched_names %>% 
+  dplyr::select(season.x, season.y, name.x, name.y, team, everything()) %>%
+  filter(season.x == season.y) %>% 
+  dplyr::select(season = season.x, name = name.y, team = team, Position = position, everything(), -season.y, -name.x, -Position)
+
+test <- unmatched_names_final %>% 
+  select(season, name) %>% 
+  group_by(name)
+unmatched_names_final <- unmatched_names_final[-c(194,21,246,37,41,53,83,113,148,243,196,24,182,281), ]
+```
+
+```{r}
+allData <- bind_rows(allData, unmatched_names_final)
+test <- allData %>% group_by(season, name) %>% summarize(n=n())
+
+view(subset(allData, is.na(Cap.Hit.Pct.League.Cap)))
+
+allPlayerSeasonData <- allData %>% 
+  filter(!is.na(Cap.Hit.Pct.League.Cap)) %>% 
+  select(season, name, team, Position, everything())
+
+# write.csv(allPlayerSeasonData, "allPlayerSeasonData.csv", row.names=FALSE)
+```
+

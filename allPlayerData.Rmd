@@ -1,0 +1,100 @@
+---
+title: "allPlayerData"
+author: "Harrison Cradduck"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, warning=FALSE, message=FALSE}
+# import libraries
+library(tidyverse)
+library(fuzzyjoin)
+```
+
+```{r}
+# read in files
+playerPerformanceStats <- read.csv("C:\\Users\\harri\\OneDrive\\Current Classes\\SLM 418\\API Data\\wrangledPlayerStatsFromAPI.csv")
+playerFinancialStats <- read.csv("C:\\Users\\harri\\OneDrive\\Current Classes\\SLM 418\\Finance Data\\financialSeasonStatsData.csv")
+
+playerFinancialStats <- playerFinancialStats %>% 
+  group_by(season, name) %>%
+  arrange(desc(Cap.Hit.Pct.League.Cap), .by_group = TRUE) %>%
+  summarize(
+    position = first(position),
+    Cap.Hit.Total = sum(Cap.Hit.Total, na.rm = TRUE),
+    Cap.Hit.Adjusted = sum(Cap.Hit.Adjusted, na.rm = TRUE),
+    Cap.Hit.Pct.League.Cap = sum(Cap.Hit.Pct.League.Cap, na.rm = TRUE),
+    team = first(team),
+    .groups = "drop"
+  ) %>% 
+  select(season, name, team, position, everything())
+```
+
+```{r}
+playerPerformanceStats <- playerPerformanceStats %>% 
+  separate(name, into = c("FirstName", "LastName"), sep = " +", extra="merge") %>% 
+  dplyr::mutate(LastName = tolower(LastName), FirstName = tolower(FirstName)) %>%
+  mutate(FirstName = gsub("[[:punct:]]", "", FirstName), LastName = gsub("[[:punct:]]", "", LastName)) %>% 
+  mutate(pointsPer60 = if_else(is.na(pointsPer60), 0, pointsPer60),
+         shootingPerc = if_else(goals == 1 & sog == 0, 1, if_else(goals == 2 & sog == 1, 1, shootingPerc)))
+
+playerFinancialStats <- playerFinancialStats %>% 
+  separate(name, into = c("FirstName", "LastName"), sep = " +", extra="merge") %>% 
+  dplyr::mutate(LastName = tolower(LastName), FirstName = tolower(FirstName)) %>%
+  mutate(FirstName = gsub("[[:punct:]]", "", FirstName), LastName = gsub("[[:punct:]]", "", LastName))
+```
+
+```{r}
+# merge the files by team, season, and player
+allPlayerData <- merge(playerPerformanceStats, playerFinancialStats, by = c("season", "LastName", "FirstName")) %>% 
+  dplyr::select(season, LastName, FirstName, team.x, team.y, position = position.y, everything(), -position.x)
+```
+
+```{r}
+unmatched_from_performance <- anti_join(playerPerformanceStats, playerFinancialStats, 
+                                      by = c("season", "LastName", "FirstName"))
+unmatched_from_financial <- anti_join(playerFinancialStats, playerPerformanceStats, 
+                                      by = c("season", "LastName", "FirstName"))
+```
+
+```{r}
+unmatched_names <- stringdist_inner_join(unmatched_from_performance, unmatched_from_financial, by = c("season", "LastName", "FirstName"), method = "jw", max_dist = 0.13)
+```
+
+```{r}
+summary <- unmatched_names %>% group_by(FirstName.x, LastName.x, FirstName.y, LastName.y) %>% summarize(n=n())
+unmatched_names_final <- unmatched_names %>%
+  dplyr::select(season.y, gameID, playerId, position = position.y, LastName.y, FirstName.y, team.x, team.y, everything(), -FirstName.x, -LastName.x, -season.x, -position.x) %>%
+  rename(season = season.y, LastName = LastName.y, FirstName = FirstName.y)
+```
+
+```{r}
+allPlayerFinalData <- bind_rows(allPlayerData, unmatched_names_final)
+allPlayerFinalData <- allPlayerFinalData %>%
+  mutate(across(c(homeTeam, awayTeam, team.x, team.y), ~ str_replace_all(., "PHX", "ARI")))
+
+allPlayerFinalData <- allPlayerFinalData %>%
+  mutate(team.z = case_when(
+    (team.y == homeTeam | team.y == awayTeam) & (team.x == homeTeam | team.x == awayTeam) & team.x != team.y ~ team.x,
+    (team.y == homeTeam | team.y == awayTeam) & team.y != team.x ~ team.y,
+    (team.x == homeTeam | team.x == awayTeam) & team.x != team.y ~ team.x,
+    team.x == team.y & (team.x == homeTeam | team.x == awayTeam) ~ team.x,
+    TRUE ~ team.x
+  )) %>% 
+  dplyr::select(season, gameID, playerId, LastName, FirstName, team = team.z, position, everything(), -team.x, -team.y) %>% 
+  mutate(goalsPer60 = goals / toiInMinutes * 60,
+         assistsPer60 = assists / toiInMinutes * 60,
+         pimPer60 = pim / toiInMinutes * 60,
+         hitsPer60 = hits / toiInMinutes * 60,
+         sogPer60 = sog / toiInMinutes * 60,
+         blockedShotsPer60 = blockedShots / toiInMinutes * 60,
+         giveawaysPer60 = giveaways / toiInMinutes * 60,
+         takeawaysPer60 = takeaways / toiInMinutes * 60) %>% 
+  dplyr::select(-Cap.Hit.Total, -Cap.Hit.Adjusted)
+colSums(is.na(allPlayerFinalData))
+# write.csv(allPlayerFinalData, "allPlayerGameData.csv", row.names=FALSE)
+```
