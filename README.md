@@ -56,8 +56,10 @@ R side (`Player Data/`) needs:
 install.packages(c("tidyverse", "fuzzyjoin"))
 ```
 
-Notebooks currently reference local file paths (`C:\Users\...`) from development — update those
-to your own data directory before running. Pipeline order: `Player Data/` (merge raw data) →
+The `Player Data/` notebooks read from a data directory controlled by the
+`HOCKEY_MONEYSCORE_DATA_DIR` environment variable (containing `API Data/`, `Finance Data/`, and
+`Season Data/` subfolders matching the raw exports) — set that instead of editing the notebooks.
+Pipeline order: `Player Data/` (merge raw data) →
 `Feature Selection/` (build MoneyScore) → `Elo/` (rate players) and
 `Predictions/moneyScoreFinalModel.py` (fit the cap-hit model) can run independently once
 MoneyScore is built.

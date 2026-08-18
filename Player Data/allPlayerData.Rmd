@@ -15,10 +15,17 @@ library(tidyverse)
 library(fuzzyjoin)
 ```
 
+```{r config}
+# Set the HOCKEY_MONEYSCORE_DATA_DIR environment variable to your local data
+# directory (containing "API Data/" and "Finance Data/" subfolders), or edit
+# the default path below.
+dataDir <- Sys.getenv("HOCKEY_MONEYSCORE_DATA_DIR", unset = "path/to/your/data")
+```
+
 ```{r}
 # read in files
-playerPerformanceStats <- read.csv("C:\\Users\\harri\\OneDrive\\Current Classes\\SLM 418\\API Data\\wrangledPlayerStatsFromAPI.csv")
-playerFinancialStats <- read.csv("C:\\Users\\harri\\OneDrive\\Current Classes\\SLM 418\\Finance Data\\financialSeasonStatsData.csv")
+playerPerformanceStats <- read.csv(file.path(dataDir, "API Data", "wrangledPlayerStatsFromAPI.csv"))
+playerFinancialStats <- read.csv(file.path(dataDir, "Finance Data", "financialSeasonStatsData.csv"))
 
 playerFinancialStats <- playerFinancialStats %>% 
   group_by(season, name) %>%

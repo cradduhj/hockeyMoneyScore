@@ -18,9 +18,16 @@ library(stringr)
 library(fuzzyjoin)
 ```
 
+```{r config}
+# Set the HOCKEY_MONEYSCORE_DATA_DIR environment variable to your local data
+# directory (containing "Season Data/" and "Finance Data/" subfolders), or
+# edit the default path below.
+dataDir <- Sys.getenv("HOCKEY_MONEYSCORE_DATA_DIR", unset = "path/to/your/data")
+```
+
 ```{r, warning=FALSE, message=FALSE}
 # Set your directory containing the CSVs
-csv_files <- list.files(path = "C:\\Users\\harri\\OneDrive\\Current Classes\\SLM 418\\Season Data", pattern = "\\.csv$", full.names = TRUE)
+csv_files <- list.files(path = file.path(dataDir, "Season Data"), pattern = "\\.csv$", full.names = TRUE)
 
 # Read and combine with consistent column types
 seasonPerfDataDf <- csv_files %>%
@@ -67,7 +74,7 @@ seasonPerfDataDf3 <- seasonPerfDataDf2 %>%
 ```
 
 ```{r}
-financialData <- read.csv("C:\\Users\\harri\\OneDrive\\Current Classes\\SLM 418\\Finance Data\\financialSeasonStatsData.csv")
+financialData <- read.csv(file.path(dataDir, "Finance Data", "financialSeasonStatsData.csv"))
 financialData2 <- financialData %>%
   mutate(season = as.character(season)) %>%
   arrange(season, name, desc(Cap.Hit.Total)) %>%
